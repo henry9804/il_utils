@@ -1,4 +1,4 @@
-from sensor_msgs.msg import JointState, Image
+from sensor_msgs.msg import JointState, Joy, Image
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Int32
 from .base_config import BaseConfig
@@ -47,16 +47,18 @@ class dualFR3Config(BaseConfig, name="dual_fr3"):
                 ],
             },
 
-            "/left_controller/gripper": {
-                "msg_type": Int32,
+            "/lhand_joy": {
+                "msg_type": Joy,
                 "action_names": ["left_fr3_gripper"],
                 "init_value": [0],
+                "index": [("buttons", 0)],
             },
 
-            "right_controller/gripper": {
-                "msg_type": Int32,
+            "/rhand_joy": {
+                "msg_type": Joy,
                 "action_names": ["right_fr3_gripper"],
                 "init_value": [0],
+                "index": [("buttons", 0)],
             }
         }
     }

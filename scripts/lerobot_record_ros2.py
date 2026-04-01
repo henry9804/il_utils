@@ -6,7 +6,7 @@ import cv2
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool, Int32, Int32MultiArray, Float32, Float32MultiArray
-from sensor_msgs.msg import JointState, Image, CompressedImage
+from sensor_msgs.msg import JointState, Joy, Image, CompressedImage
 from geometry_msgs.msg import Point, PoseStamped, PoseArray
 import tf2_ros
 
@@ -149,13 +149,21 @@ class ROS2LeRobotRecord(Node):
         
         # action
         self.action = np.zeros(self.config.action['shape'])
+        self.prev_joy = {}
         for topic_name, topic_config in self.config.action['topics'].items():
             if 'init_value' in topic_config.keys():
                 for i, action_name in enumerate(topic_config['action_names']):
                     self.action[self.action_name_to_index[action_name]] = topic_config['init_value'][i]
-            self.create_subscription(
-                topic_config['msg_type'], topic_name, 
-                lambda msg, names=topic_config['action_names']: self._action_callback(msg, names), 1)
+            if isinstance(topic_config['msg_type'], Joy):
+                self.prev_joy[topic_name] = None
+                self.create_subscription(
+                    Joy, topic_name,
+                    lambda msg, name=topic_name, config=topic_config: self._joy_callback(msg, name, config), 1
+                )
+            else:
+                self.create_subscription(
+                    topic_config['msg_type'], topic_name, 
+                    lambda msg, names=topic_config['action_names']: self._action_callback(msg, names), 1)
 
         # end-effectors
         self.ee_states = {}
@@ -226,6 +234,21 @@ class ROS2LeRobotRecord(Node):
         for i, state_name in enumerate(names):
             self.state[self.state_name_to_index[state_name]] = data[i]
 
+    def _joy_callback(self, msg: Joy, name, config):
+        if self.prev_joy[name] is None:
+            self.prev_joy[name] = msg
+        for i, action_name in enumerate(config['action_names']):
+            action_idx = self.action_name_to_index[action_name]
+            (field, idx) = config['index'][i]
+            if field == "buttons":
+                if self.prev_joy[name].buttons[idx] == 0 and msg.buttons[idx] == 1: # button pressed
+                    self.action[action_idx] = 1 - self.action[action_idx]           # 0->1, 1->0
+            elif field == "axes":
+                self.action[action_idx] = msg.axes[idx]
+            else:
+                self.get_logger().warn(f"wrong field name is given for {action_name} {name} msg config")
+        self.prev_joy[name] = msg
+
     def _action_callback(self, msg, names):
         data = extract_data_from_msg(msg)
         for i, action_name in enumerate(names):
@@ -278,6 +301,9 @@ class ROS2LeRobotRecord(Node):
             if 'init_value' in topic_config.keys():
                 for i, action_name in enumerate(topic_config['action_names']):
                     self.action[self.action_name_to_index[action_name]] = topic_config['init_value'][i]
+
+        for joy_name in self.prev_joy.keys():
+            self.prev_joy[joy_name] = None
         
         for ee_name in self.ee_states.keys():
             if isinstance(self.ee_states[ee_name], dict):
