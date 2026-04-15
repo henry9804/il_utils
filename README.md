@@ -80,6 +80,14 @@ Each config defines `fps`, `state`, `action`, `end_effector`, and `image` fields
 
 ## Scripts
 
+> Additional pacakges required for lerobot dataset processing scripts.
+
+```bash
+pip install lerobot
+pip install opencv-python
+pip install tqdm
+```
+
 ### Record episodes from ROS 2
 
 ```bash

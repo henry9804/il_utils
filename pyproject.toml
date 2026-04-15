@@ -12,7 +12,6 @@ dependencies = [
     "h5py",
     "opencv-python",
     "tqdm",
-    "lerobot",
 ]
 
 [tool.setuptools.packages.find]
