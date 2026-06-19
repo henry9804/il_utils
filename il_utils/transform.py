@@ -10,16 +10,13 @@ class TF_mat:
             self.T = T
 
     @classmethod
-    def from_vectors(cls, pos, quat):
+    def from_vectors(cls, pos, quat=[0.0, 0.0, 0.0, 1.0]):
         pos = np.array(pos)
         quat = np.array(quat)
-        if len(pos.shape) == 2:
-            tf_mat = cls(np.zeros([pos.shape[0], 4, 4]))
-            tf_mat.T[:,3,3] = 1
-        else:
-            tf_mat = cls()
-        tf_mat.T[...,:3,:3] = Rotation.from_quat(quat).as_matrix()
+        tf_mat = cls(np.zeros([*pos.shape[:-1], 4, 4]))
         tf_mat.T[...,:3,3] = pos
+        tf_mat.T[...,:3,:3] = Rotation.from_quat(quat).as_matrix()
+        tf_mat.T[...,3,3] = 1
 
         return tf_mat
 
@@ -27,13 +24,29 @@ class TF_mat:
     def from_mat(cls, pos, rotm):
         pos = np.array(pos)
         rotm = np.array(rotm)
-        if len(pos.shape) == 2:
-            tf_mat = cls(np.zeros([pos.shape[0], 4, 4]))
-            tf_mat.T[:,3,3] = 1
-        else:
-            tf_mat = cls()
-        tf_mat.T[...,:3,:3] = rotm
+        tf_mat = cls(np.zeros([*pos.shape[:-1], 4, 4]))
         tf_mat.T[...,:3,3] = pos
+        tf_mat.T[...,:3,:3] = rotm
+        tf_mat.T[...,3,3] = 1
+
+        return tf_mat
+
+    @classmethod
+    def from_rot6d(cls, pos, rot6d):
+        pos = np.array(pos)        
+        rot6d = np.array(rot6d)
+        num_TFs = rot6d.shape[:-1]
+        # GramSchmidt orthogonalization
+        rot1 = rot6d[...,:3] / np.linalg.norm(rot6d[...,:3], axis=-1, keepdims=True)
+        rot2 = rot6d[...,3:] - (rot6d[...,3:]*rot1).sum(axis=-1).reshape(*num_TFs, -1) * rot1
+        rot2 = rot2 / np.linalg.norm(rot2, axis=-1, keepdims=True)
+        rot3 = np.cross(rot1, rot2)
+        rotm = np.stack([rot1, rot2, rot3], axis=-1)
+
+        tf_mat = cls(np.zeros([*num_TFs, 4, 4]))
+        tf_mat.T[...,:3,3] = pos
+        tf_mat.T[...,:3,:3] = rotm
+        tf_mat.T[...,3,3] = 1
 
         return tf_mat
     
@@ -76,8 +89,8 @@ class TF_mat:
     def as_matrix(self):
         return self.T
     
-    def as_vectors(self):
-        p = self.T[...,:3,3]
+    def get_vectors(self):
+        p = self.T[...,:3,3].copy()
         R = self.T[...,:3,:3]
         q = Rotation.from_matrix(R).as_quat()
 
@@ -103,8 +116,21 @@ class TF_mat:
     def get_pos(self):
         return self.T[..., :3,3].copy()
     
+    def get_quat(self):
+        R = self.T[...,:3,:3]
+        q = Rotation.from_matrix(R).as_quat()
+        return q
+    
+    def get_rotvec(self):
+        R = self.T[...,:3,:3]
+        rotvec = Rotation.from_matrix(R).as_rotvec()
+        return rotvec
+    
     def get_rotm(self):
         return self.T[..., :3,:3].copy()
+    
+    def get_rot6d(self):
+        return self.T[..., :3,:2].swapaxes(-1,-2).reshape(*self.T.shape[:-2], -1)
 
 def cubic(time, time_0, time_f, x_0, x_f, x_dot_0, x_dot_f):
     if time < time_0:
